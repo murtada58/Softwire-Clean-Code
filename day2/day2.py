@@ -1,24 +1,42 @@
+from copy import deepcopy
 
-import opcode
+def main():
+    int_code = read_int_code("./day2Input.txt")
+    # print(run_int_code(int_code))
+
+    for i in range(0, 99):
+        for j in range(0, 99):
+            int_code_copy = deepcopy(int_code)
+            int_code_copy[1] = i
+            int_code_copy[2] = j
+            if 19690720 == run_int_code(int_code_copy):
+                print((i * 100) + j)
+                return
 
 
-program = []
-with open("./day2Input.txt") as f:
-    program = f.readlines()[0].split(",")
+def read_int_code(path):
+    int_code = []
+    with open(path) as f:
+        int_code = f.readlines()[0].split(",")
 
-program = [int(num) for num in program]
+    return [int(num) for num in int_code]
 
-for i in range(0, len(program), 4):
-    operation_code = program[i]
-    if operation_code == 99:
-        print(program[0])
-        break
-    first_operand_location = program[i + 1]
-    second_operand_location = program[i + 2]
-    save_location = program[i + 3]
+def run_int_code(int_code):
+    for i in range(0, len(int_code), 4):
+        operation_code = int_code[i]
 
-    if operation_code == 1:
-        program[save_location] = program[first_operand_location] + program[second_operand_location]
+        if operation_code == 99:
+            return int_code[0]
 
-    elif operation_code == 2:
-        program[save_location] = program[first_operand_location] * program[second_operand_location]
+        first_operand_location = int_code[i + 1]
+        second_operand_location = int_code[i + 2]
+        save_location = int_code[i + 3]
+
+        if operation_code == 1:
+            int_code[save_location] = int_code[first_operand_location] + int_code[second_operand_location]
+
+        elif operation_code == 2:
+            int_code[save_location] = int_code[first_operand_location] * int_code[second_operand_location]
+
+if __name__ == "__main__":
+    main()
