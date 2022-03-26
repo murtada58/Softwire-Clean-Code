@@ -1,13 +1,34 @@
+from asyncio.windows_events import NULL
 from copy import deepcopy
 
+
 def main():
-    int_code_runner = IntCodeRunner("./day5Input.txt")
+    int_code_runner = IntCodeRunner(
+        path="./day5Input.txt",
+        parameter_reader=read_parameter,
+        ops={
+            1: add,
+            2: mul,
+            3: save,
+            4: out,
+            5: jmpt,
+            6: jmpf,
+            7: lt,
+            8: eq,
+        },
+        default_op=invalid_op,
+    )
     int_code_runner.run_int_code()
-    
+
 
 class IntCodeRunner():
-    def __init__(self, path):
-        self.int_code = self.read_int_code(path)
+    def __init__(self, **kwargs):
+        if "path" in kwargs:
+            self.int_code = self.read_int_code(kwargs["path"])
+        self.parameter_reader = kwargs["parameter_reader"] if "parameter_reader" in kwargs else lambda **kwargs: kwargs["int_code"][kwargs["int_code"][kwargs["parameter_pointer"]]]
+        self.ops = kwargs["ops"] if "ops" in kwargs else {}
+        self.halt_code = kwargs["halt_code"] if "halt_code" in kwargs else 99
+        self.default_op = kwargs["default_op"] if "default_op" in kwargs else lambda **kwargs: kwargs["instruction_pointer"]
 
     def read_int_code(self, path):
         int_code = []
@@ -19,7 +40,9 @@ class IntCodeRunner():
     def read_instruction(self, instruction):
         instruction = str(instruction).rjust(5, '0')
         op_code = int(instruction[3:])
-        parameter_modes = [int(parameter_mode) for parameter_mode in instruction[0:3]]
+        parameter_modes = [int(parameter_mode)
+                           for parameter_mode
+                           in instruction[0:3]]
         parameter_modes.reverse()
         return op_code, parameter_modes
 
@@ -28,89 +51,173 @@ class IntCodeRunner():
 
         instruction_pointer = 0
         while True:
-            op_code, parameter_modes = self.read_instruction(int_code[instruction_pointer])
-            # print(instruction_pointer, op_code)
-            if op_code == 99:
+            op_code, parameter_modes = self.read_instruction(
+                int_code[instruction_pointer])
+
+            if op_code == self.halt_code:
                 return int_code[0]
-            elif op_code == 1:
-                instruction_pointer = self.add(int_code, instruction_pointer, parameter_modes)
-            elif op_code == 2:
-                instruction_pointer = self.mul(int_code, instruction_pointer, parameter_modes)
-            elif op_code == 3:
-                instruction_pointer = self.save(int_code, instruction_pointer)
-            elif op_code == 4:
-                instruction_pointer = self.out(int_code, instruction_pointer, parameter_modes)
-            elif op_code == 5:
-                instruction_pointer = self.jmpt(int_code, instruction_pointer, parameter_modes)
-            elif op_code == 6:
-                instruction_pointer = self.jmpf(int_code, instruction_pointer, parameter_modes)
-            elif op_code == 7:
-                instruction_pointer = self.lt(int_code, instruction_pointer, parameter_modes)
-            elif op_code == 8:
-                instruction_pointer = self.eq(int_code, instruction_pointer, parameter_modes)
+            elif op_code in self.ops:
+                instruction_pointer = self.ops[op_code](
+                    int_code=int_code,
+                    instruction_pointer=instruction_pointer,
+                    parameter_reader=self.parameter_reader,
+                    parameter_modes=parameter_modes,
+                )
             else:
-                print(f"Invalid command: {op_code} at: {instruction_pointer}")
-                return -1
-        
+                instruction_pointer = self.default_op(
+                    int_code=int_code,
+                    instruction_pointer=instruction_pointer,
+                    parameter_reader=self.parameter_reader,
+                    parameter_modes=parameter_modes,
+                )
 
 
-    def read_parameter(self, int_code, parameter_pointer, parameter_mode):
-        if parameter_mode == 0:
-            return int_code[int_code[parameter_pointer]]
-        if parameter_mode == 1:
-            return int_code[parameter_pointer]
+def invalid_op(**kwargs):
+    print(
+        f"Invalid command: {kwargs['op_code']} at: {kwargs['instruction_pointer']}")
+    return kwargs["instruction_pointer"]
 
-    def add(self, int_code, instruction_pointer, parameter_modes):
-        first_parameter = self.read_parameter(int_code, instruction_pointer + 1, parameter_modes[0])
-        second_parameter = self.read_parameter(int_code, instruction_pointer + 2, parameter_modes[1])
-        save_location = self.read_parameter(int_code, instruction_pointer + 3, 1)
-        int_code[save_location] = first_parameter + second_parameter
-        return instruction_pointer + 4
 
-    def mul(self, int_code, instruction_pointer, parameter_modes):
-        first_parameter = self.read_parameter(int_code, instruction_pointer + 1, parameter_modes[0])
-        second_parameter = self.read_parameter(int_code, instruction_pointer + 2, parameter_modes[1])
-        save_location = self.read_parameter(int_code, instruction_pointer + 3, 1)
-        int_code[save_location] = first_parameter * second_parameter
-        return instruction_pointer + 4
+def read_parameter(**kwargs):
+    parameter_number = kwargs["parameter_number"] if "parameter_number" in kwargs else 1
+    if kwargs["parameter_mode"] == 0:
+        return kwargs["int_code"][kwargs["int_code"][kwargs["instruction_pointer"] + parameter_number]]
+    if kwargs["parameter_mode"] == 1:
+        return kwargs["int_code"][kwargs["instruction_pointer"] + parameter_number]
 
-    def save(self, int_code, instruction_pointer):
-        first_parameter = self.read_parameter(int_code, instruction_pointer + 1, 1)
-        int_code[first_parameter] = int(input(f"Please input in integer to store at location {first_parameter}: "))
-        return instruction_pointer + 2
-    
-    def out(self, int_code, instruction_pointer, parameter_modes):
-        first_parameter = self.read_parameter(int_code, instruction_pointer + 1, parameter_modes[0])
-        print(first_parameter)
-        return instruction_pointer + 2
 
-    def jmpt(self, int_code, instruction_pointer, parameter_modes):
-        first_parameter = self.read_parameter(int_code, instruction_pointer + 1, parameter_modes[0])
-        second_parameter = self.read_parameter(int_code, instruction_pointer + 2, parameter_modes[1])
-        if first_parameter != 0: return second_parameter
-        return instruction_pointer + 3
+def add(**kwargs):
+    first_parameter = kwargs["parameter_reader"](
+        parameter_number=1,
+        parameter_mode=kwargs["parameter_modes"][0],
+        **kwargs
+    )
+    second_parameter = kwargs["parameter_reader"](
+        parameter_number=2,
+        parameter_mode=kwargs["parameter_modes"][1],
+        **kwargs
+    )
+    save_location = kwargs["parameter_reader"](
+        parameter_number=3,
+        parameter_mode=1,
+        **kwargs
+    )
+    kwargs["int_code"][save_location] = first_parameter + second_parameter
+    return kwargs["instruction_pointer"] + 4
 
-    def jmpf(self, int_code, instruction_pointer, parameter_modes):
-        first_parameter = self.read_parameter(int_code, instruction_pointer + 1, parameter_modes[0])
-        second_parameter = self.read_parameter(int_code, instruction_pointer + 2, parameter_modes[1])
-        if first_parameter == 0: return second_parameter
-        return instruction_pointer + 3
 
-    def lt(self, int_code, instruction_pointer, parameter_modes):
-        first_parameter = self.read_parameter(int_code, instruction_pointer + 1, parameter_modes[0])
-        second_parameter = self.read_parameter(int_code, instruction_pointer + 2, parameter_modes[1])
-        save_location = self.read_parameter(int_code, instruction_pointer + 3, 1)
-        if first_parameter < second_parameter: int_code[save_location] = 1
-        else: int_code[save_location] = 0
-        return instruction_pointer + 4
+def mul(**kwargs):
+    first_parameter = kwargs["parameter_reader"](
+        parameter_number=1,
+        parameter_mode=kwargs["parameter_modes"][0],
+        **kwargs
+    )
+    second_parameter = kwargs["parameter_reader"](
+        parameter_number=2,
+        parameter_mode=kwargs["parameter_modes"][1],
+        **kwargs
+    )
+    save_location = kwargs["parameter_reader"](
+        parameter_number=3, parameter_mode=1, **kwargs)
+    kwargs["int_code"][save_location] = first_parameter * second_parameter
+    return kwargs["instruction_pointer"] + 4
 
-    def eq(self, int_code, instruction_pointer, parameter_modes):
-        first_parameter = self.read_parameter(int_code, instruction_pointer + 1, parameter_modes[0])
-        second_parameter = self.read_parameter(int_code, instruction_pointer + 2, parameter_modes[1])
-        save_location = self.read_parameter(int_code, instruction_pointer + 3, 1)
-        if first_parameter == second_parameter: int_code[save_location] = 1
-        else: int_code[save_location] = 0
-        return instruction_pointer + 4
+
+def save(**kwargs):
+    first_parameter = kwargs["parameter_reader"](
+        parameter_number=1,
+        parameter_mode=1,
+        **kwargs
+    )
+    kwargs["int_code"][first_parameter] = int(
+        input(f"Please input in integer to store at location {first_parameter}: "))
+    return kwargs["instruction_pointer"] + 2
+
+
+def out(**kwargs):
+    first_parameter = kwargs["parameter_reader"](
+        parameter_number=1,
+        parameter_mode=kwargs["parameter_modes"][0],
+        **kwargs
+    )
+    print(first_parameter)
+    return kwargs["instruction_pointer"] + 2
+
+
+def jmpt(**kwargs):
+    first_parameter = kwargs["parameter_reader"](
+        parameter_number=1,
+        parameter_mode=kwargs["parameter_modes"][0],
+        **kwargs
+    )
+    second_parameter = kwargs["parameter_reader"](
+        parameter_number=2,
+        parameter_mode=kwargs["parameter_modes"][1],
+        **kwargs
+    )
+    if first_parameter != 0:
+        return second_parameter
+    return kwargs["instruction_pointer"] + 3
+
+
+def jmpf(**kwargs):
+    first_parameter = kwargs["parameter_reader"](
+        parameter_number=1,
+        parameter_mode=kwargs["parameter_modes"][0],
+        **kwargs
+    )
+    second_parameter = kwargs["parameter_reader"](
+        parameter_number=2,
+        parameter_mode=kwargs["parameter_modes"][1],
+        **kwargs
+    )
+    if first_parameter == 0:
+        return second_parameter
+    return kwargs["instruction_pointer"] + 3
+
+
+def lt(**kwargs):
+    first_parameter = kwargs["parameter_reader"](
+        parameter_number=1,
+        parameter_mode=kwargs["parameter_modes"][0],
+        **kwargs
+    )
+    second_parameter = kwargs["parameter_reader"](
+        parameter_number=2,
+        parameter_mode=kwargs["parameter_modes"][1],
+        **kwargs
+    )
+    save_location = kwargs["parameter_reader"](
+        parameter_number=3,
+        parameter_mode=1,
+        **kwargs
+    )
+    if first_parameter < second_parameter:
+        kwargs["int_code"][save_location] = 1
+    else:
+        kwargs["int_code"][save_location] = 0
+    return kwargs["instruction_pointer"] + 4
+
+
+def eq(**kwargs):
+    first_parameter = kwargs["parameter_reader"](
+        parameter_number=1,
+        parameter_mode=kwargs["parameter_modes"][0],
+        **kwargs
+    )
+    second_parameter = kwargs["parameter_reader"](
+        parameter_number=2,
+        parameter_mode=kwargs["parameter_modes"][1],
+        **kwargs
+    )
+    save_location = kwargs["parameter_reader"](
+        parameter_number=3, parameter_mode=1, **kwargs)
+    if first_parameter == second_parameter:
+        kwargs["int_code"][save_location] = 1
+    else:
+        kwargs["int_code"][save_location] = 0
+    return kwargs["instruction_pointer"] + 4
+
 
 if __name__ == "__main__":
     main()
